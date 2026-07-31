@@ -9,6 +9,14 @@ arranque. Un solo script, una sola pasada, y el equipo queda administrable por S
 
 ## Uso
 
+Toda la documentación va también dentro del script, para no depender del README
+en el equipo destino:
+
+```sh
+bash install-kiosk.sh --ayuda
+```
+
+
 Arranca el live ISO de Arch en el equipo destino y conéctalo **por cable**. Desde
 la consola física, ponle contraseña a root para poder entrar por SSH:
 
@@ -21,9 +29,9 @@ Si tu red no tiene DHCP, dale una dirección a mano antes de seguir:
 
 ```sh
 ip link set enp3s0 up
-ip address add 192.168.1.50/24 dev enp3s0
-ip route add default via 192.168.1.1
-resolvectl dns enp3s0 192.168.1.1 1.1.1.1
+ip address add 192.168.0.200/24 dev enp3s0
+ip route add default via 192.168.0.100
+resolvectl dns enp3s0 8.8.8.8 8.8.4.4
 ping -c3 archlinux.org     # el DNS hace falta para el pacstrap
 ```
 
@@ -37,7 +45,7 @@ curl -fsSL -O https://raw.githubusercontent.com/jrdeavila/arch-kiosk-tv-helpdesk
 less install-kiosk.sh      # léelo antes: formatea un disco entero
 lsblk                      # identifica el disco
 
-DISK=/dev/sda IP_ADDR=192.168.1.50/24 bash install-kiosk.sh
+DISK=/dev/sda bash install-kiosk.sh
 ```
 
 Pide confirmación escribiendo el nombre del disco y una contraseña, y a partir de
@@ -59,8 +67,8 @@ momento y te ahorras el lío.
 | `ADMIN_USER` | `jricardo` | usuario con sudo y SSH |
 | `KIOSK_USER` | `kiosco` | usuario sin privilegios que abre el navegador |
 | `IP_MODE` | `static` | `static` o `dhcp` |
-| `IP_ADDR` | `192.168.1.50/24` | **fuera del pool DHCP del router** |
-| `IP_GW` / `IP_DNS` | `192.168.1.1` | |
+| `IP_ADDR` | `192.168.0.200/24` | **fuera del pool DHCP del router** |
+| `IP_GW` / `IP_DNS` | `192.168.0.100` y `8.8.8.8 8.8.4.4` | |
 | `TIMEZONE` / `LOCALE` / `KEYMAP` | `America/Bogota`, `es_CO.UTF-8`, `la-latin1` | |
 
 Detecta solo el firmware (systemd-boot en UEFI, GRUB en BIOS legacy), el
@@ -111,8 +119,8 @@ sola. La recuperación sale gratis, sin watchdog.
 ## Después
 
 ```sh
-ssh jricardo@192.168.1.50
-ssh-copy-id jricardo@192.168.1.50    # y luego quita PasswordAuthentication
+ssh jricardo@192.168.0.200
+ssh-copy-id jricardo@192.168.0.200    # y luego quita PasswordAuthentication
 
 # cambiar la página
 sudoedit /etc/kiosco.conf && sudo systemctl restart greetd

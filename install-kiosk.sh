@@ -28,9 +28,9 @@ set -euo pipefail
 : "${ADMIN_USER:=jricardo}"              # usuario con sudo y ssh (tú)
 : "${KIOSK_USER:=kiosco}"                # usuario sin privilegios que abre el navegador
 : "${IP_MODE:=static}"                   # static | dhcp
-: "${IP_ADDR:=192.168.1.50/24}"          # solo si IP_MODE=static. FUERA del pool DHCP
-: "${IP_GW:=192.168.1.1}"
-: "${IP_DNS:=192.168.1.1 1.1.1.1}"
+: "${IP_ADDR:=192.168.0.200/24}"         # solo si IP_MODE=static. FUERA del pool DHCP
+: "${IP_GW:=192.168.0.100}"
+: "${IP_DNS:=8.8.8.8 8.8.4.4}"
 : "${TIMEZONE:=America/Bogota}"
 : "${LOCALE:=es_CO.UTF-8}"
 : "${KEYMAP:=la-latin1}"
@@ -39,6 +39,117 @@ say()  { printf '\n\033[1;36m::\033[0m \033[1m%s\033[0m\n' "$*"; }
 ok()   { printf '   \033[32m✓\033[0m %s\n' "$*"; }
 inf()  { printf '   \033[90m·\033[0m %s\n' "$*"; }
 die()  { printf '\n\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
+
+# ===========================================================================
+#  AYUDA — toda la documentación viaja dentro del script, para no depender de
+#  tener el README a mano en el equipo destino.
+# ===========================================================================
+if [ "${1:-}" = "--ayuda" ] || [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+cat <<AYUDA
+
+  install-kiosk.sh — Arch Linux en un equipo que solo muestra una página web
+  a pantalla completa en un televisor.
+
+  ---------------------------------------------------------------------------
+  1. EN EL EQUIPO DESTINO (teclado y pantalla, una sola vez)
+  ---------------------------------------------------------------------------
+
+  Arranca el live ISO de Arch y conecta el cable de red. Luego:
+
+      ip -brief link                  # mira cómo se llama: enp3s0, eno1...
+
+  Si hay DHCP, ya tendrás IP; compruébalo con 'ip -brief address'. Si NO hay
+  DHCP, o quieres usar desde ya la dirección definitiva:
+
+      ip link set enp3s0 up
+      ip address add $IP_ADDR dev enp3s0
+      ip route add default via $IP_GW
+      resolvectl dns enp3s0 $IP_DNS
+      ping -c3 archlinux.org          # el DNS hace falta para el pacstrap
+
+  Ponle contraseña a root si vas a entrar por SSH desde otro equipo:
+
+      passwd
+
+  ---------------------------------------------------------------------------
+  2. LANZARLO DESDE EL USB
+  ---------------------------------------------------------------------------
+
+  Monta el USB FUERA de /mnt (/mnt es la raíz del sistema que se va a instalar)
+  y ejecútalo desde ahí: así el log se escribe directamente en el USB.
+
+      lsblk -o NAME,SIZE,RM,FSTYPE,MOUNTPOINTS    # el extraíble lleva RM=1
+      mount /dev/sdb1 /tmp/usb --mkdir
+      cd /tmp/usb
+      lsblk                                       # identifica el disco destino
+
+      DISK=/dev/sda bash install-kiosk.sh
+
+  Pide escribir el nombre del disco para confirmar el borrado, y una contraseña
+  (dos veces) que valdrá para root y para $ADMIN_USER. A partir de ahí va solo:
+  tarda lo que tarde el pacstrap.
+
+  Al terminar:  reboot   (y quita el USB)
+
+  ---------------------------------------------------------------------------
+  3. VARIABLES  (todas por entorno, delante del 'bash install-kiosk.sh')
+  ---------------------------------------------------------------------------
+
+      DISK          OBLIGATORIA. /dev/sda, /dev/nvme0n1...
+      URL           $URL
+      KIOSK_HOST    $KIOSK_HOST
+      ADMIN_USER    $ADMIN_USER          (sudo + ssh)
+      KIOSK_USER    $KIOSK_USER          (abre el navegador, sin privilegios)
+      IP_MODE       $IP_MODE             (static | dhcp)
+      IP_ADDR       $IP_ADDR
+      IP_GW         $IP_GW
+      IP_DNS        $IP_DNS
+      TIMEZONE      $TIMEZONE
+      LOCALE        $LOCALE
+      KEYMAP        $KEYMAP
+      LOG           fuerza dónde escribir el log
+
+  OJO CON LAS DOS IP: la del live ISO es temporal y es a la que haces ssh
+  durante la instalación. IP_ADDR es la estática que se escribe en el sistema
+  instalado y NO entra en vigor hasta reiniciar. Si al live le pones ya la
+  misma, la dirección no cambia en ningún momento.
+
+  ---------------------------------------------------------------------------
+  4. SI FALLA
+  ---------------------------------------------------------------------------
+
+  Deja un log con la traza de cada orden, incluida la etapa del chroot, más un
+  diagnóstico (lsblk, montajes, red, pacman.log, dmesg). Acaba:
+
+    - Junto al script, si lo lanzaste desde el USB. Ya lo tienes.
+    - Si no, en /tmp (que es RAM) y al fallar intenta copiarlo solo a un USB
+      extraíble escribible. Si no encuentra ninguno, te dice cómo hacerlo.
+
+  Si la instalación va bien, queda también dentro del equipo en
+  /var/log/kiosco-install.log
+
+  NO es idempotente: formatea. Si algo sale mal a mitad, se relanza entero.
+
+  ---------------------------------------------------------------------------
+  5. DESPUÉS
+  ---------------------------------------------------------------------------
+
+      ssh $ADMIN_USER@${IP_ADDR%%/*}
+      ssh-copy-id $ADMIN_USER@${IP_ADDR%%/*}      # y quita PasswordAuthentication
+
+      # cambiar la página del televisor:
+      sudoedit /etc/kiosco.conf && sudo systemctl restart greetd
+
+  En la BIOS del HP: "Restore on AC power loss" -> "Power On", para que tras un
+  corte de luz vuelva solo sin que nadie pulse el botón.
+
+  El montaje es greetd (autologin sin greeter) -> cage (compositor Wayland de
+  una sola ventana) -> chromium --kiosk. Si el navegador se cae, cage termina,
+  greetd relanza la sesión y la pantalla vuelve sola.
+
+AYUDA
+exit 0
+fi
 
 # ===========================================================================
 #  ETAPA 2 — dentro del arch-chroot
