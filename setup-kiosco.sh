@@ -74,7 +74,9 @@ inf "paquetes: ${DRV[*]}"
 
 # --- 2. Paquetes del kiosco ------------------------------------------------
 say "Instalando paquetes"
-pacman -Sy --needed --noconfirm "${DRV[@]}" \
+# -Syu y no -Sy: en Arch, sincronizar la base de datos sin actualizar el
+# sistema deja actualizaciones parciales, que es como se rompen las libc.
+pacman -Syu --needed --noconfirm "${DRV[@]}" \
   cage chromium greetd \
   ttf-dejavu noto-fonts noto-fonts-emoji \
   openssh
@@ -130,6 +132,30 @@ command = "cage -s -- /usr/local/bin/kiosco-navegador"
 user = "$KIOSK_USER"
 EOF
 ok "cage + chromium en $URL"
+
+# --- 4b. Que no se duerma nunca --------------------------------------------
+say "Suspensión y apagado de pantalla"
+# Un kiosco que se suspende desaparece de la red y deja el televisor en negro.
+# En un portátil con la tapa cerrada esto es lo primero que pasa, y se
+# diagnostica fatal: parece que el equipo "se cae solo".
+systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target >/dev/null 2>&1
+mkdir -p /etc/systemd/logind.conf.d
+cat > /etc/systemd/logind.conf.d/10-kiosco.conf <<'EOF'
+# Kiosco: esto no se duerme nunca, ni con la tapa cerrada ni por inactividad.
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchDocked=ignore
+HandleLidSwitchExternalPower=ignore
+HandlePowerKey=ignore
+IdleAction=ignore
+EOF
+# El apagado de la consola de texto, por si el navegador tarda en arrancar.
+mkdir -p /etc/systemd/system/getty@tty1.service.d
+cat > /etc/systemd/system/getty@tty1.service.d/10-noblank.conf <<'EOF'
+[Service]
+ExecStartPre=/usr/bin/setterm --blank 0 --powersave off
+EOF
+ok "sleep.target enmascarado, tapa y inactividad ignoradas"
 
 # --- 5. Red (opcional) -----------------------------------------------------
 if [ "$CONFIG_RED" = 1 ]; then
